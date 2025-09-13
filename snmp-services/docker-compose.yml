@@ -1,0 +1,118 @@
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
+    container_name: snmp-auth-service
+    ports:
+      - "16101:161/udp"  # SNMP port for auth service
+    environment:
+      - SERVICE_NAME=Authentication Service
+      - SERVICE_IP=192.168.1.10
+    volumes:
+      - ./mibs:/usr/share/snmp/mibs:ro
+    networks:
+      - snmp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "snmpwalk", "-v2c", "-c", "public", "localhost", "1.3.6.1.4.1.9999.1.1.0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  db-service:
+    build:
+      context: .
+      dockerfile: ./db-service/Dockerfile
+    container_name: snmp-db-service
+    ports:
+      - "16102:161/udp"  # SNMP port for db service
+    environment:
+      - SERVICE_NAME=Database Service
+      - SERVICE_IP=192.168.1.11
+    volumes:
+      - ./mibs:/usr/share/snmp/mibs:ro
+    networks:
+      - snmp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "snmpwalk", "-v2c", "-c", "public", "localhost", "1.3.6.1.4.1.9999.1.1.0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Additional services for testing
+  web-server:
+    build:
+      context: .
+      dockerfile: ./web-server/Dockerfile
+    container_name: snmp-web-server
+    ports:
+      - "16103:161/udp"  # SNMP port for web server
+    environment:
+      - SERVICE_NAME=Web Server
+      - SERVICE_IP=192.168.1.12
+    volumes:
+      - ./mibs:/usr/share/snmp/mibs:ro
+    networks:
+      - snmp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "snmpwalk", "-v2c", "-c", "public", "localhost", "1.3.6.1.4.1.9999.1.1.0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  load-balancer:
+    build:
+      context: .
+      dockerfile: ./load-balancer/Dockerfile
+    container_name: snmp-load-balancer
+    ports:
+      - "16104:161/udp"  # SNMP port for load balancer
+    environment:
+      - SERVICE_NAME=Load Balancer
+      - SERVICE_IP=192.168.1.13
+    volumes:
+      - ./mibs:/usr/share/snmp/mibs:ro
+    networks:
+      - snmp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "snmpwalk", "-v2c", "-c", "public", "localhost", "1.3.6.1.4.1.9999.1.1.0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  cache-service:
+    build:
+      context: .
+      dockerfile: ./cache-service/Dockerfile
+    container_name: snmp-cache-service
+    ports:
+      - "16105:161/udp"  # SNMP port for cache service
+    environment:
+      - SERVICE_NAME=Cache Service
+      - SERVICE_IP=192.168.1.14
+    volumes:
+      - ./mibs:/usr/share/snmp/mibs:ro
+    networks:
+      - snmp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "snmpwalk", "-v2c", "-c", "public", "localhost", "1.3.6.1.4.1.9999.1.1.0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  snmp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
