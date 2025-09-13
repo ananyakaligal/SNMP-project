@@ -5,14 +5,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Cpu, MemoryStick, Zap, Bug, RefreshCw } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Cpu,
+  MemoryStick,
+  Zap,
+  Bug,
+  RefreshCw,
+  Play,
+  Square,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
+  Activity,
+  TrendingUp,
+} from "lucide-react"
 import { PerformanceCharts } from "@/components/performance-charts"
+import { MIBExplorer } from "@/components/mib-explorer"
 
 interface Agent {
   name: string
   ip: string
   status: "UP" | "DOWN"
+  uptime?: string
 }
 
 interface MetricData {
@@ -20,6 +35,16 @@ interface MetricData {
   memoryUsage: number
   latency: number
   totalErrors: number
+  uptime: string
+  requestsProcessed: number
+  errorRate: number
+}
+
+interface LiveAlert {
+  id: string
+  message: string
+  severity: "high" | "medium" | "low"
+  timestamp: Date
 }
 
 export default function SNMPDashboard() {
@@ -30,21 +55,37 @@ export default function SNMPDashboard() {
     memoryUsage: 0,
     latency: 0,
     totalErrors: 0,
+    uptime: "0d 0h 0m",
+    requestsProcessed: 0,
+    errorRate: 0,
   })
   const [logLevel, setLogLevel] = useState("INFO")
   const [loading, setLoading] = useState(true)
   const [alert, setAlert] = useState<string | null>(null)
+  const [liveAlerts, setLiveAlerts] = useState<LiveAlert[]>([])
 
-  // Fetch agents on component mount
   useEffect(() => {
     fetchAgents()
+    fetchServices()
+
+    // Set up live alerts polling
+    const alertInterval = setInterval(fetchLiveAlerts, 10000) // Check for alerts every 10s
+
+    return () => clearInterval(alertInterval)
   }, [])
 
-  // Fetch metrics when agent is selected
   useEffect(() => {
     if (selectedAgent) {
       fetchMetrics(selectedAgent.ip)
       fetchLogLevel(selectedAgent.ip)
+
+      // Set up real-time updates every 30 seconds
+      const interval = setInterval(() => {
+        fetchMetrics(selectedAgent.ip)
+        fetchLogLevel(selectedAgent.ip)
+      }, 30000)
+
+      return () => clearInterval(interval)
     }
   }, [selectedAgent])
 
@@ -63,28 +104,68 @@ export default function SNMPDashboard() {
     }
   }
 
+  const fetchServices = async () => {
+    try {
+      const response = await fetch("/api/services")
+      const data = await response.json()
+      // Update agents with service data if available
+      if (data && data.length > 0) {
+        setAgents((prev) =>
+          prev.map((agent) => ({
+            ...agent,
+            uptime: data.find((s: any) => s.ip === agent.ip)?.uptime || agent.uptime,
+          })),
+        )
+      }
+    } catch (error) {
+      console.error("Failed to fetch services:", error)
+    }
+  }
+
+  const fetchLiveAlerts = async () => {
+    try {
+      const response = await fetch("/api/v1/snmp/traps")
+      const data = await response.json()
+      if (data && data.length > 0) {
+        setLiveAlerts(data.slice(0, 3)) // Show only latest 3 alerts
+      }
+    } catch (error) {
+      console.error("Failed to fetch live alerts:", error)
+    }
+  }
+
   const fetchMetrics = async (agentIp: string) => {
     try {
-      // Fetch multiple OIDs for metrics
-      const [cpuResponse, memoryResponse, latencyResponse, errorsResponse] = await Promise.all([
-        fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.3.0`),
-        fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.4.0`),
-        fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.5.0`),
-        fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.6.0`),
-      ])
+      const [cpuResponse, memoryResponse, latencyResponse, errorsResponse, uptimeResponse, requestsResponse] =
+        await Promise.all([
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.3.0`),
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.4.0`),
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.5.0`),
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.6.0`),
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.8.0`),
+          fetch(`/api/v1/snmp/get?agentIp=${agentIp}&oid=1.3.6.1.4.1.9999.1.9.0`),
+        ])
 
-      const [cpu, memory, latency, errors] = await Promise.all([
+      const [cpu, memory, latency, errors, uptime, requests] = await Promise.all([
         cpuResponse.json(),
         memoryResponse.json(),
         latencyResponse.json(),
         errorsResponse.json(),
+        uptimeResponse.json(),
+        requestsResponse.json(),
       ])
+
+      const totalRequests = requests.value || 0
+      const errorRate = totalRequests > 0 ? ((errors.value || 0) / totalRequests) * 100 : 0
 
       setMetrics({
         cpuUsage: cpu.value || 0,
         memoryUsage: memory.value || 0,
         latency: latency.value || 0,
         totalErrors: errors.value || 0,
+        uptime: uptime.value || "0d 0h 0m",
+        requestsProcessed: totalRequests,
+        errorRate: Math.round(errorRate * 100) / 100,
       })
     } catch (error) {
       console.error("Failed to fetch metrics:", error)
@@ -126,6 +207,31 @@ export default function SNMPDashboard() {
     }
   }
 
+  const controlService = async (action: "start" | "stop" | "restart") => {
+    if (!selectedAgent) return
+
+    try {
+      const response = await fetch("/api/v1/snmp/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentIp: selectedAgent.ip,
+          action,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.status === "success") {
+        setAlert(`Service ${action} successful`)
+        setTimeout(() => setAlert(null), 3000)
+        // Refresh agent status
+        fetchAgents()
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} service:`, error)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -135,175 +241,299 @@ export default function SNMPDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">SNMP Dashboard</h1>
-          <div className="flex items-center gap-3">
-            <Avatar>
-              <AvatarFallback className="bg-primary text-primary-foreground">T3</AvatarFallback>
-            </Avatar>
-            <span className="text-sm text-muted-foreground">Team 3</span>
+    <TooltipProvider>
+      <div className="min-h-screen bg-background transition-all duration-300">
+        {/* Header */}
+        <header className="border-b border-border bg-card shadow-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Network Monitoring System</h1>
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-primary rounded-full flex items-center justify-center">
+                <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
+              </div>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Alert Banner */}
-      {alert && (
-        <Alert className="mx-6 mt-4 border-primary bg-primary/10">
-          <AlertDescription className="text-primary">{alert}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="container mx-auto px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left Sidebar - Services */}
-          <div className="lg:col-span-1">
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-card-foreground">Services</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {agents.map((agent) => (
-                  <div
-                    key={agent.ip}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedAgent?.ip === agent.ip
-                        ? "border-primary bg-primary/10"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                    onClick={() => setSelectedAgent(agent)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-card-foreground">{agent.name}</span>
-                      <Badge variant={agent.status === "UP" ? "default" : "destructive"}>{agent.status}</Badge>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+        {/* Live Alerts Banner */}
+        {liveAlerts.length > 0 && (
+          <div className="mx-4 sm:mx-6 mt-4">
+            {liveAlerts.map((alert) => (
+              <Alert key={alert.id} className="mb-2 border-red-200 bg-red-50 animate-pulse">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800 flex items-center justify-between">
+                  <span>{alert.message}</span>
+                  <span className="text-xs text-red-600">{new Date(alert.timestamp).toLocaleTimeString()}</span>
+                </AlertDescription>
+              </Alert>
+            ))}
           </div>
+        )}
 
-          {/* Right Content Area */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-card to-card/80 border-border">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">CPU Usage</p>
-                      <p className="text-2xl font-bold text-card-foreground">{metrics.cpuUsage}%</p>
-                    </div>
-                    <Cpu className="h-8 w-8 text-primary" />
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Success Alert */}
+        {alert && (
+          <Alert className="mx-4 sm:mx-6 mt-4 border-green-200 bg-green-50">
+            <AlertDescription className="text-green-800">{alert}</AlertDescription>
+          </Alert>
+        )}
 
-              <Card className="bg-gradient-to-br from-card to-card/80 border-border">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Memory Usage</p>
-                      <p className="text-2xl font-bold text-card-foreground">{metrics.memoryUsage} MB</p>
+        <div className="container mx-auto px-4 sm:px-6 py-6">
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            {/* Left Sidebar - Services */}
+            <div className="xl:col-span-1">
+              <Card className="bg-card border-border shadow-sm hover:shadow-md transition-shadow duration-200">
+                <CardHeader>
+                  <CardTitle className="text-card-foreground flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Services
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {agents.map((agent) => (
+                    <div
+                      key={agent.ip}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
+                        selectedAgent?.ip === agent.ip
+                          ? "border-primary bg-primary/10 shadow-sm"
+                          : "border-border hover:border-primary/50 hover:bg-gray-50"
+                      }`}
+                      onClick={() => setSelectedAgent(agent)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-card-foreground">{agent.name}</span>
+                        <Badge variant={agent.status === "UP" ? "default" : "destructive"} className="animate-pulse">
+                          {agent.status}
+                        </Badge>
+                      </div>
+                      {agent.uptime && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {agent.uptime}
+                        </div>
+                      )}
                     </div>
-                    <MemoryStick className="h-8 w-8 text-chart-2" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-card to-card/80 border-border">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Latency</p>
-                      <p className="text-2xl font-bold text-card-foreground">{metrics.latency} ms</p>
-                    </div>
-                    <Zap className="h-8 w-8 text-chart-3" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-card to-card/80 border-border">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Errors</p>
-                      <p className="text-2xl font-bold text-card-foreground">{metrics.totalErrors}</p>
-                    </div>
-                    <Bug className="h-8 w-8 text-destructive" />
-                  </div>
+                  ))}
                 </CardContent>
               </Card>
             </div>
 
-            {/* Performance Charts Component */}
-            <PerformanceCharts agentIp={selectedAgent?.ip || null} />
+            {/* Right Content Area */}
+            <div className="xl:col-span-3 space-y-6">
+              {/* Enhanced Stats Cards with Tooltips */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-blue-700">CPU Usage</p>
+                            <p className="text-lg sm:text-2xl font-bold text-blue-900">{metrics.cpuUsage}%</p>
+                          </div>
+                          <Cpu className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Current CPU utilization percentage</p>
+                  </TooltipContent>
+                </Tooltip>
 
-            {/* Service Control Panel */}
-            {selectedAgent && (
-              <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="text-card-foreground">Service Control - {selectedAgent.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Current Log Level: {logLevel}</p>
-                    <div className="flex gap-2">
-                      {["INFO", "DEBUG", "ERROR"].map((level) => (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-green-700">Memory</p>
+                            <p className="text-lg sm:text-2xl font-bold text-green-900">{metrics.memoryUsage} MB</p>
+                          </div>
+                          <MemoryStick className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Current memory usage in megabytes</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-yellow-700">Latency</p>
+                            <p className="text-lg sm:text-2xl font-bold text-yellow-900">{metrics.latency} ms</p>
+                          </div>
+                          <Zap className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Average response latency in milliseconds</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-red-700">Errors</p>
+                            <p className="text-lg sm:text-2xl font-bold text-red-900">{metrics.totalErrors}</p>
+                          </div>
+                          <Bug className="h-6 w-6 sm:h-8 sm:w-8 text-red-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Total error count</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-purple-700">Uptime</p>
+                            <p className="text-sm sm:text-lg font-bold text-purple-900">{metrics.uptime}</p>
+                          </div>
+                          <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>System uptime duration</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-indigo-700">Requests</p>
+                            <p className="text-lg sm:text-2xl font-bold text-indigo-900">
+                              {metrics.requestsProcessed.toLocaleString()}
+                            </p>
+                          </div>
+                          <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-indigo-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Total requests processed</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02] col-span-1">
+                      <CardContent className="p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs sm:text-sm text-orange-700">Error Rate</p>
+                            <p className="text-lg sm:text-2xl font-bold text-orange-900">{metrics.errorRate}%</p>
+                          </div>
+                          <AlertTriangle className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Current error rate percentage</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Performance Charts Component */}
+              <PerformanceCharts agentIp={selectedAgent?.ip || null} />
+
+              {/* Enhanced Service Control Panel */}
+              {selectedAgent && (
+                <Card className="bg-card border-border shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <CardHeader>
+                    <CardTitle className="text-card-foreground flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      Service Control - {selectedAgent.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-3">Service Actions</p>
+                      <div className="flex flex-wrap gap-2">
                         <Button
-                          key={level}
-                          variant={logLevel === level ? "default" : "outline"}
+                          variant="outline"
                           size="sm"
-                          onClick={() => setLogLevelValue(level)}
+                          onClick={() => controlService("start")}
+                          className="hover:bg-green-50 hover:border-green-300 transition-colors"
                         >
-                          {level}
+                          <Play className="h-4 w-4 mr-1" />
+                          Start
                         </Button>
-                      ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => controlService("stop")}
+                          className="hover:bg-red-50 hover:border-red-300 transition-colors"
+                        >
+                          <Square className="h-4 w-4 mr-1" />
+                          Stop
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => controlService("restart")}
+                          className="hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Restart
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {/* MIB Details Panel */}
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-card-foreground">MIB Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Service Status:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.2.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">CPU Usage:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.3.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Memory Usage:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.4.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Latency:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.5.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Errors:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.6.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Log Level:</span>
-                    <span className="font-mono text-card-foreground">1.3.6.1.4.1.9999.1.7.0</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Current Log Level:
+                        <Badge variant="outline" className="ml-2">
+                          {logLevel}
+                        </Badge>
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {["INFO", "DEBUG", "ERROR"].map((level) => (
+                          <Button
+                            key={level}
+                            variant={logLevel === level ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setLogLevelValue(level)}
+                            className="transition-all duration-200"
+                          >
+                            {level}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* MIB Explorer Component */}
+              <MIBExplorer agentIp={selectedAgent?.ip || null} />
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }

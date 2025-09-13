@@ -4,25 +4,25 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated color palette for professional SNMP dashboard dark theme */
-  --background: #1e1e2f;
-  --foreground: #ffffff;
-  --card: #1a1a1a;
-  --card-foreground: #ffffff;
-  --popover: #1a1a1a;
-  --popover-foreground: #ffffff;
+  /* Updated color palette for light theme SNMP dashboard */
+  --background: #f9fafb;
+  --foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
   --primary: #ff6f61;
   --primary-foreground: #ffffff;
-  --secondary: #b0b0b0;
-  --secondary-foreground: #1e1e2f;
-  --muted: #b0b0b0;
-  --muted-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #1f2937;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
   --accent: #ff6f61;
   --accent-foreground: #ffffff;
-  --destructive: #ff3d3d;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #3a3a3a;
-  --input: #1a1a1a;
+  --border: #e5e7eb;
+  --input: #ffffff;
   --ring: rgba(255, 111, 97, 0.5);
   --chart-1: #ff6f61;
   --chart-2: #4caf50;
@@ -30,18 +30,18 @@
   --chart-4: #ffc107;
   --chart-5: #673ab7;
   --radius: 0.5rem;
-  --sidebar: #2b2b2b;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #1e1e2f;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1f2937;
+  --sidebar-primary: #f9fafb;
   --sidebar-primary-foreground: #ff6f61;
   --sidebar-accent: #ff6f61;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #3a3a3a;
+  --sidebar-border: #e5e7eb;
   --sidebar-ring: rgba(255, 111, 97, 0.3);
 }
 
 .dark {
-  /* Dark theme tokens remain consistent with the design brief */
+  /* Keep dark theme for potential future use */
   --background: #1e1e2f;
   --foreground: #ffffff;
   --card: #1a1a1a;
