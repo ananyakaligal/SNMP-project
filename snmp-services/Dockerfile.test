@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+
+# Install SNMP tools
+RUN apt-get update && apt-get install -y \
+    snmp \
+    snmp-mibs-downloader \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy test script
+COPY test-ubuntu.sh /test-ubuntu.sh
+RUN chmod +x /test-ubuntu.sh
+
+# Keep container running
+CMD ["tail", "-f", "/dev/null"]

@@ -1,0 +1,150 @@
+-- Enterprise MIB for SNMP Monitoring System
+-- OID: 1.3.6.1.4.1.9999
+
+ENTERPRISE-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, Integer32, Unsigned32, Counter32, 
+    Gauge32, TimeTicks, IpAddress, OCTET STRING, NOTIFICATION-TYPE
+        FROM SNMPv2-SMI
+    DisplayString, TruthValue
+        FROM SNMPv2-TC;
+
+enterpriseMIB MODULE-IDENTITY
+    LAST-UPDATED "202412010000Z"
+    ORGANIZATION "SNMP Monitoring System"
+    CONTACT-INFO "admin@snmp-monitor.com"
+    DESCRIPTION "Enterprise MIB for SNMP monitoring system"
+    REVISION "202412010000Z"
+    DESCRIPTION "Initial version"
+    ::= { iso(1) org(3) dod(6) internet(1) private(4) enterprises(1) 9999 }
+
+-- System Information and Metrics
+system OBJECT IDENTIFIER ::= { enterpriseMIB 1 }
+
+sysName OBJECT-TYPE
+    SYNTAX DisplayString
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "System name identifier"
+    ::= { system 1 }
+
+sysStatus OBJECT-TYPE
+    SYNTAX INTEGER { up(1), down(2) }
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Current system status"
+    ::= { system 2 }
+
+cpuUsage OBJECT-TYPE
+    SYNTAX Gauge32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Current CPU utilization percentage (0-100)"
+    ::= { system 3 }
+
+memoryUsage OBJECT-TYPE
+    SYNTAX Gauge32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Current memory usage in MB"
+    ::= { system 4 }
+
+avgLatency OBJECT-TYPE
+    SYNTAX Gauge32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Average response latency in milliseconds"
+    ::= { system 5 }
+
+totalErrors OBJECT-TYPE
+    SYNTAX Counter32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Total error count since startup"
+    ::= { system 6 }
+
+logLevel OBJECT-TYPE
+    SYNTAX INTEGER { info(1), debug(2), error(3) }
+    MAX-ACCESS read-write
+    STATUS current
+    DESCRIPTION "Current logging level"
+    ::= { system 7 }
+
+uptime OBJECT-TYPE
+    SYNTAX DisplayString
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "System uptime in human readable format"
+    ::= { system 8 }
+
+requestsProcessed OBJECT-TYPE
+    SYNTAX Counter32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Total requests processed"
+    ::= { system 9 }
+
+networkInBytes OBJECT-TYPE
+    SYNTAX Gauge32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Network input bytes per second"
+    ::= { system 10 }
+
+networkOutBytes OBJECT-TYPE
+    SYNTAX Gauge32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Network output bytes per second"
+    ::= { system 11 }
+
+-- Network Interface Information
+interfaces OBJECT IDENTIFIER ::= { enterpriseMIB 2 }
+
+ifNumber OBJECT-TYPE
+    SYNTAX Integer32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Number of network interfaces"
+    ::= { interfaces 1 }
+
+-- Service Monitoring and Control
+services OBJECT IDENTIFIER ::= { enterpriseMIB 3 }
+
+serviceCount OBJECT-TYPE
+    SYNTAX Integer32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Number of monitored services"
+    ::= { services 1 }
+
+activeServices OBJECT-TYPE
+    SYNTAX Integer32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION "Number of active services"
+    ::= { services 2 }
+
+-- Traps
+enterpriseTraps OBJECT IDENTIFIER ::= { enterpriseMIB 4 }
+
+highCpuUsage NOTIFICATION-TYPE
+    OBJECTS { cpuUsage }
+    STATUS current
+    DESCRIPTION "High CPU usage detected"
+    ::= { enterpriseTraps 1 }
+
+highMemoryUsage NOTIFICATION-TYPE
+    OBJECTS { memoryUsage }
+    STATUS current
+    DESCRIPTION "High memory usage detected"
+    ::= { enterpriseTraps 2 }
+
+serviceDown NOTIFICATION-TYPE
+    OBJECTS { sysStatus }
+    STATUS current
+    DESCRIPTION "Service is down"
+    ::= { enterpriseTraps 3 }
+
+END
